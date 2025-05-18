@@ -19,7 +19,9 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Add OpenAI API key configuration
 openai_api_key = os.getenv('OPENAI_API_KEY')
-client = openai.OpenAI(api_key=openai_api_key)
+client = None
+if openai_api_key:
+    client = openai.OpenAI(api_key=openai_api_key)
 
 # Country code to country name mapping
 COUNTRY_CODES = {
@@ -61,11 +63,27 @@ COUNTRY_CODES = {
     # Add more codes as needed
 }
 
+def generate_fallback_explanation(var1: str, var2: str, correlation: float) -> str:
+    """
+    Generate a fallback explanation when OpenAI API is not available.
+    """
+    templates = [
+        f"Our groundbreaking research reveals a correlation (r = {correlation:.2f}) between {var1} and {var2}. This finding challenges traditional economic theories and suggests a deeper connection that mainstream science has yet to acknowledge.",
+        f"Intriguingly, we've discovered a correlation (r = {correlation:.2f}) between {var1} and {var2}. This unexpected relationship raises fascinating questions about the interconnected nature of modern society.",
+        f"Statistical analysis reveals a correlation (r = {correlation:.2f}) between {var1} and {var2}. This surprising connection demonstrates how seemingly unrelated phenomena can be deeply intertwined.",
+        f"Through rigorous analysis, we've identified a correlation (r = {correlation:.2f}) between {var1} and {var2}. This remarkable finding suggests a complex web of relationships in our modern world.",
+        f"Our data-driven investigation uncovers a correlation (r = {correlation:.2f}) between {var1} and {var2}. This unexpected relationship challenges our understanding of cause and effect."
+    ]
+    return np.random.choice(templates)
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def generate_ai_explanation(var1: str, var2: str, correlation: float) -> str:
     """
     Generate a satirical academic explanation using AI.
     """
+    if not client:
+        return generate_fallback_explanation(var1, var2, correlation)
+
     prompt = f"""Generate a satirical academic explanation for a spurious correlation between {var1} and {var2} (correlation coefficient: {correlation:.2f}).\nThe explanation should:\n1. Sound like a real academic paper.\n2. Reference real academic theories (e.g., cognitive dissonance, game theory, network effects, etc.) rather than fictional ones.\n3. Use academic language and jargon.\n4. Be humorous but maintain a serious academic tone.\n5. Reference modern concepts (AI, blockchain, quantum physics, etc.).\n6. Include the correlation coefficient in proper statistical format (r = X.XX).\n7. Be 3-4 sentences long.\n\nFormat the response as a single paragraph without any additional text or formatting."""
 
     try:
@@ -81,8 +99,7 @@ def generate_ai_explanation(var1: str, var2: str, correlation: float) -> str:
         return response.choices[0].message.content.strip()
     except Exception as e:
         print(f"Error generating AI explanation: {str(e)}")
-        # Fallback to a basic explanation if AI generation fails
-        return f"Our groundbreaking research reveals a correlation (r = {correlation:.2f}) between {var1} and {var2}. This finding challenges traditional economic theories and suggests a deeper connection that mainstream science has yet to acknowledge."
+        return generate_fallback_explanation(var1, var2, correlation)
 
 def generate_satirical_explanation(var1: str, var2: str, correlation: float) -> str:
     """
@@ -92,8 +109,7 @@ def generate_satirical_explanation(var1: str, var2: str, correlation: float) -> 
         return generate_ai_explanation(var1, var2, correlation)
     except Exception as e:
         print(f"Error in generate_satirical_explanation: {str(e)}")
-        # Fallback to a basic explanation if AI generation fails
-        return f"Our groundbreaking research reveals a correlation (r = {correlation:.2f}) between {var1} and {var2}. This finding challenges traditional economic theories and suggests a deeper connection that mainstream science has yet to acknowledge."
+        return generate_fallback_explanation(var1, var2, correlation)
 
 def fetch_eurostat_data() -> Dict[str, pd.DataFrame]:
     """
@@ -101,120 +117,46 @@ def fetch_eurostat_data() -> Dict[str, pd.DataFrame]:
     """
     # Core indicators
     core_indicators = {
-        'gdp': {
+        'gdp_current_prices': {
             'code': 'nama_10_gdp',
             'filter_pars': {'na_item': 'B1GQ', 'unit': 'CP_MEUR'}
         },
-        'unemployment': {
+        'unemployment_rate_total_15_74': {
             'code': 'une_rt_a',
             'filter_pars': {'age': 'Y15-74', 'unit': 'PC_ACT', 'sex': 'T'}
         },
-        'population': {
+        'total_population': {
             'code': 'demo_pjan',
             'filter_pars': {'age': 'TOTAL', 'sex': 'T', 'unit': 'NR'}
         },
-        'education': {
+        'tertiary_education_15_64': {
             'code': 'edat_lfse_03',
             'filter_pars': {'sex': 'T', 'age': 'Y15-64', 'isced11': 'ED5-8', 'unit': 'PC'}
         },
-        'life_expectancy': {
+        'life_expectancy_at_birth': {
             'code': 'demo_mlexpec',
             'filter_pars': {'sex': 'T', 'age': 'Y_LT1', 'unit': 'YR'}
         }
     }
 
-    # Fun random indicators
+    # Fun indicators
     fun_indicators = {
-        # Eurostat fun/quirky indicators
-        'cheese_production': {
-            'code': 'apro_cpsh1',
-            'filter_pars': {'prod': 'CHS', 'unit': 'KG_HAB'}
-        },
-        'beer_production': {
-            'code': 'apro_cpsh1',
-            'filter_pars': {'prod': 'BEER', 'unit': 'L_HAB'}
-        },
-        'ice_cream_production': {
-            'code': 'apro_cpsh1',
-            'filter_pars': {'prod': 'ICEC', 'unit': 'KG_HAB'}
-        },
-        'cinema_admissions': {
-            'code': 'cult_ac_cinatt',
-            'filter_pars': {'unit': 'PER_INHAB', 'indic_cul': 'ATT'}
-        },
-        'museums_per_capita': {
-            'code': 'cult_ent_mus',
-            'filter_pars': {'unit': 'PER_100000', 'indic_cul': 'MUS'}
-        },
-        'public_libraries': {
-            'code': 'cult_ent_lib',
-            'filter_pars': {'unit': 'NUMBER', 'indic_cul': 'LIB'}
-        },
-        'sports_club_membership': {
+        'sports_club_membership_rate': {
             'code': 'hlth_silc_10',
             'filter_pars': {'unit': 'PC', 'indic_he': 'SPRTCLUB'}
         },
-        'fruit_consumption': {
+        'daily_fruit_consumption': {
             'code': 'hlth_ehis_fv3e',
             'filter_pars': {'unit': 'PC', 'sex': 'T', 'age': 'TOTAL'}
         },
-        'chocolate_production': {
-            'code': 'apro_cpsh1',
-            'filter_pars': {'prod': 'CHOC', 'unit': 'T'}
-        },
-        'mcdonalds_restaurants': {
+        'restaurants_mobile_food_services': {
             'code': 'sbs_na_1a_se_r2',
             'filter_pars': {'nace_r2': 'I5610', 'unit': 'NR'}
         },
-        'unesco_sites': {
-            'code': 'cult_ent_her',
-            'filter_pars': {'unit': 'NUMBER', 'indic_cul': 'HER'}
-        },
-        'coffee_imports': {
-            'code': 'apro_cpsh1',
-            'filter_pars': {'prod': 'COFFEE', 'unit': 'KG_HAB'}
-        },
-        'book_titles_published': {
-            'code': 'cult_ent_book',
-            'filter_pars': {'unit': 'NUMBER', 'indic_cul': 'BOOK'}
-        },
-        'electric_cars': {
-            'code': 'road_eqs_carmot',
-            'filter_pars': {'unit': 'NR', 'fuel': 'ELC'}
-        },
-        'rooms_per_dwelling': {
-            'code': 'ilc_lvho01',
-            'filter_pars': {'unit': 'NR', 'tenure': 'TOTAL'}
-        },
-        'cinema_screens': {
-            'code': 'cult_ent_cinsc',
-            'filter_pars': {'unit': 'NUMBER', 'indic_cul': 'CINSC'}
-        },
-        'theme_park_visits': {
-            'code': 'tour_occ_ninat',
-            'filter_pars': {'unit': 'NR', 'nace_r2': 'R9321'}
-        },
-        'football_clubs': {
-            'code': 'sbs_na_1a_se_r2',
-            'filter_pars': {'nace_r2': 'R9312', 'unit': 'NR'}
-        },
-        'average_tv_time': {
-            'code': 'ilc_lvps04',
-            'filter_pars': {'unit': 'HOURS', 'indic_il': 'TV'}
-        },
-        # Placeholders for external/quirky indicators (to be scraped or added manually)
-        # 'pets_per_household': 'external',
-        # 'nobel_laureates': 'external',
-        # 'eurovision_points': 'external',
-        # 'ufo_sightings': 'external',
-        # 'public_holidays': 'external',
-        # 'saunas_per_capita': 'external',
-        # 'ski_resorts': 'external',
-        # 'selfies_per_year': 'external',
-        # 'michelin_starred_restaurants': 'external',
-        # 'castles': 'external',
-        # 'eurovision_wins': 'external',
-        # 'mcdonalds_per_capita': 'external',
+        'electric_passenger_cars': {
+            'code': 'road_eqs_carpda',
+            'filter_pars': {'unit': 'NR', 'mot_nrg': 'ELC'}
+        }
     }
 
     # Combine all indicators
@@ -240,6 +182,12 @@ def fetch_eurostat_data() -> Dict[str, pd.DataFrame]:
     
     return data_dict
 
+def get_eurostat_dataset_url(code: str) -> str:
+    """
+    Get the official Eurostat dataset URL for a given dataset code.
+    """
+    return f"https://ec.europa.eu/eurostat/databrowser/view/{code}/default/table"
+
 def create_spurious_correlation_plot(
     data: pd.DataFrame,
     var1: str,
@@ -254,6 +202,27 @@ def create_spurious_correlation_plot(
     try:
         # Get full country name from code
         country_name = COUNTRY_CODES.get(country, country)
+        
+        # Get dataset codes for both variables
+        dataset_codes = {
+            'gdp_current_prices': 'nama_10_gdp',
+            'unemployment_rate_total_15_74': 'une_rt_a',
+            'total_population': 'demo_pjan',
+            'tertiary_education_15_64': 'edat_lfse_03',
+            'life_expectancy_at_birth': 'demo_mlexpec',
+            'restaurants_mobile_food_services': 'sbs_na_1a_se_r2',
+            'book_titles_published_total': 'cult_ent_book',
+            'electric_passenger_cars': 'road_eqs_carpda',
+            'average_rooms_per_dwelling': 'ilc_lvho01',
+            'cinema_screens_total': 'cult_ent_cinsc',
+            'theme_park_visits': 'tour_occ_ninat',
+            'football_club_enterprises': 'sbs_na_1a_se_r2',
+            'average_daily_tv_time': 'ilc_lvps04'
+        }
+        
+        # Get dataset URLs
+        dataset_url1 = get_eurostat_dataset_url(dataset_codes.get(var1, ''))
+        dataset_url2 = get_eurostat_dataset_url(dataset_codes.get(var2, ''))
         
         # Create Plotly figure
         fig = go.Figure()
@@ -303,17 +272,14 @@ def create_spurious_correlation_plot(
                 side='right',
                 gridcolor='#f0f0f0'
             ),
-            legend=dict(
-                font=dict(size=16),
-                bgcolor='rgba(255,255,255,0.8)'
-            ),
+            showlegend=False,
             margin=dict(l=40, r=40, t=60, b=40),
             plot_bgcolor='white',
             paper_bgcolor='white',
             height=600,
             width=1000,
-            showlegend=True,
-            hovermode='x unified'
+            hovermode='x unified',
+            template='plotly_white'
         )
         
         # Generate Plotly div
@@ -330,95 +296,134 @@ def create_spurious_correlation_plot(
         filename = f"spurious_{var1}_vs_{var2}_{country}.html"
         filepath = os.path.join(output_dir, filename)
         
-        # Apple-like HTML template
-        html = f"""
-        <!DOCTYPE html>
-        <html lang='en'>
+        # Create HTML content
+        html = f"""<!DOCTYPE html>
+        <html lang="en">
         <head>
-          <meta charset='UTF-8'>
-          <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-          <title>Spurious Correlation: {var1} vs {var2}</title>
-          <link rel="preconnect" href="https://fonts.googleapis.com">
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-          <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400;600;700&display=swap" rel="stylesheet">
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>{var1.replace('_', ' ').title()} vs {var2.replace('_', ' ').title()}</title>
           <style>
             body {{
-              font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-              background: #fff;
-              color: #111;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
               margin: 0;
-              padding: 20px;
+              padding: 0;
+              background: #f9f9fb;
+              color: #1d1d1f;
               line-height: 1.6;
             }}
             .container {{
               max-width: 1000px;
-              margin: 0 auto;
-              padding: 32px;
-              background: #fafbfc;
-              border-radius: 20px;
-              box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+              margin: auto;
+              padding: 60px 24px 80px;
             }}
             .headline {{
-              font-size: 2.5rem;
+              font-size: 2.75rem;
               font-weight: 700;
-              margin-bottom: 0.5em;
-              letter-spacing: -0.02em;
-              line-height: 1.2;
-              color: #1d1d1f;
+              text-align: center;
+              margin-bottom: 1rem;
+              letter-spacing: -0.5px;
             }}
             .subtitle {{
-              font-size: 1.5rem;
-              font-weight: 600;
-              color: #ff3b30;
-              margin-bottom: 1em;
+              font-size: 1.25rem;
+              text-align: center;
+              color: #555;
+              margin-bottom: 2.5rem;
             }}
-            .correlation-details {{
-              font-size: 1.2rem;
-              color: #86868b;
-              margin-bottom: 2em;
-            }}
-            .plotly-chart {{
-              margin: 2em 0;
-              border-radius: 10px;
-              overflow: hidden;
-              box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            .correlation-details, .plotly-chart, .dataset-links {{
+              background: #fff;
+              padding: 32px;
+              border-radius: 20px;
+              box-shadow: 0 6px 24px rgba(0, 0, 0, 0.04);
+              margin-bottom: 3rem;
             }}
             .callout {{
-              background: #f5f5f7;
-              border-left: 5px solid #007aff;
-              border-radius: 12px;
-              padding: 1.5em;
-              margin: 2em 0;
-              font-size: 1.2rem;
+              background: #eef3fa;
+              border-left: 6px solid #007aff;
+              border-radius: 16px;
+              padding: 28px;
+              font-size: 1.1rem;
               color: #1d1d1f;
+              margin-bottom: 3rem;
             }}
             .callout-title {{
               font-weight: 600;
               color: #007aff;
-              font-size: 1.3em;
-              margin-bottom: 0.5em;
+              font-size: 1.25rem;
+              margin-bottom: 0.75rem;
+            }}
+            .dataset-links h3 {{
+              margin-top: 0;
+              font-size: 1.2rem;
+              color: #1d1d1f;
+            }}
+            .dataset-links a {{
+              color: #007aff;
+              text-decoration: none;
+              display: block;
+              margin: 0.75em 0;
+              transition: all 0.2s;
+            }}
+            .dataset-links a:hover {{
+              text-decoration: underline;
+              transform: translateX(6px);
+            }}
+            .back-btn {{
+              display: inline-block;
+              color: #007aff;
+              text-decoration: none;
+              font-size: 1.1rem;
+              margin-bottom: 2rem;
+              transition: all 0.2s;
+            }}
+            .back-btn:hover {{
+              text-decoration: underline;
+              transform: translateX(-6px);
+            }}
+            .plotly-chart {{
+              width: 100% !important;
+              max-width: 100%;
+              overflow: hidden;
+            }}
+            .plotly-chart .js-plotly-plot {{
+              width: 100% !important;
+              max-width: 100% !important;
+            }}
+            .plotly-chart .plotly-graph-div {{
+              width: 100% !important;
+              max-width: 100% !important;
             }}
             @media (max-width: 768px) {{
-              body {{ padding: 10px; }}
-              .container {{ padding: 20px; }}
               .headline {{ font-size: 2rem; }}
-              .subtitle {{ font-size: 1.2rem; }}
+              .subtitle {{ font-size: 1rem; margin-bottom: 2rem; }}
+              .plotly-chart {{ padding: 20px; }}
+              .correlation-details, .dataset-links, .callout {{ padding: 20px; border-radius: 12px; }}
             }}
           </style>
         </head>
         <body>
           <div class="container">
+            <a href="https://altdaluv.github.io/eurostat-correlation-finder/correlation_map.html" class="back-btn">&#8592; Back to Correlation Map</a>
             <div class="headline">{var1.replace('_', ' ').title()}<br>vs<br>{var2.replace('_', ' ').title()}</div>
             <div class="subtitle">Country: {country_name}</div>
+
             <div class="correlation-details">
               <strong>Correlation Coefficient:</strong> {correlation:.3f}<br>
               <strong>Time Period:</strong> {data.index.min().year} - {data.index.max().year}<br>
               <strong>Number of Data Points:</strong> {len(data)}
             </div>
+
             <div class="plotly-chart">{plotly_div}</div>
+
             <div class="callout">
               <div class="callout-title">Satirical Academic Explanation</div>
               {explanation}
+            </div>
+
+            <div class="dataset-links">
+              <h3>Official Eurostat Datasets</h3>
+              <a href="{dataset_url1}" target="_blank">{var1.replace('_', ' ').title()} Dataset</a>
+              <a href="{dataset_url2}" target="_blank">{var2.replace('_', ' ').title()} Dataset</a>
             </div>
           </div>
         </body>

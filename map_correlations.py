@@ -34,6 +34,38 @@ COUNTRY_CODES = {
     'UK': 'United Kingdom'
 }
 
+# ISO 3-letter to 2-letter code mapping
+ISO3_TO_ISO2 = {
+    'AUT': 'AT',
+    'BEL': 'BE',
+    'BGR': 'BG',
+    'HRV': 'HR',
+    'CYP': 'CY',
+    'CZE': 'CZ',
+    'DNK': 'DK',
+    'EST': 'EE',
+    'FIN': 'FI',
+    'FRA': 'FR',
+    'DEU': 'DE',
+    'GRC': 'EL',
+    'HUN': 'HU',
+    'IRL': 'IE',
+    'ITA': 'IT',
+    'LVA': 'LV',
+    'LTU': 'LT',
+    'LUX': 'LU',
+    'MLT': 'MT',
+    'NLD': 'NL',
+    'POL': 'PL',
+    'PRT': 'PT',
+    'ROU': 'RO',
+    'SVK': 'SK',
+    'SVN': 'SI',
+    'ESP': 'ES',
+    'SWE': 'SE',
+    'GBR': 'UK'
+}
+
 # Reverse mapping for easier lookup
 NAME_TO_CODE = {v: k for k, v in COUNTRY_CODES.items()}
 
@@ -171,6 +203,10 @@ def create_correlation_map():
         const europeanNames = Object.keys({json.dumps(NAME_TO_CODE)});
         // Map country name to ISO code for matching GeoJSON
         const nameToCode = {json.dumps(NAME_TO_CODE)};
+        // Add ISO3 to ISO2 mapping
+        const ISO3_TO_ISO2 = {json.dumps(ISO3_TO_ISO2)};
+        // Add COUNTRY_CODES mapping
+        const COUNTRY_CODES = {json.dumps(COUNTRY_CODES)};
         // Assign earth tone colors to each European country
         let colorMap = {{}};
         europeanNames.forEach((name, i) => {{
@@ -202,16 +238,18 @@ def create_correlation_map():
                     // Try to match by ISO code or country name
                     const code = d.id || d.properties.ISO_A2 || d.properties.iso_a2 || d.properties.ADM0_A3 || d.properties.ADM0_A3_IS || d.properties.ISO2 || d.properties.ISO3;
                     const name = d.properties.name || d.properties.NAME || d.properties.ADMIN;
-                    // Find the country name for this code
-                    let countryName = null;
-                    for (const [n, c] of Object.entries(nameToCode)) {{
-                        if (c === code) {{
-                            countryName = n;
-                            break;
-                        }}
+                    // First try to match by ISO3 code
+                    if (code && ISO3_TO_ISO2[code]) {{
+                        const iso2Code = ISO3_TO_ISO2[code];
+                        const countryName = COUNTRY_CODES[iso2Code];
+                        if (countryName && colorMap[countryName]) return colorMap[countryName];
                     }}
-                    if (!countryName && europeanNames.includes(name)) countryName = name;
-                    if (countryName && colorMap[countryName]) return colorMap[countryName];
+                    
+                    // If that fails, try to match by name
+                    if (europeanNames.includes(name)) {{
+                        if (colorMap[name]) return colorMap[name];
+                    }}
+                    
                     // If it's land but not Europe, fill with a muted earth tone
                     if (d.geometry && d.geometry.type && d.geometry.type !== 'Polygon' && d.geometry.type !== 'MultiPolygon') return '#D2B48C';  // Warm Beige for ocean
                     return '#f7f3ec';  // Light beige for non-European land
@@ -221,29 +259,36 @@ def create_correlation_map():
                 .attr('cursor', d => {{
                     const code = d.id || d.properties.ISO_A2 || d.properties.iso_a2 || d.properties.ADM0_A3 || d.properties.ADM0_A3_IS || d.properties.ISO2 || d.properties.ISO3;
                     const name = d.properties.name || d.properties.NAME || d.properties.ADMIN;
-                    let countryName = null;
-                    for (const [n, c] of Object.entries(nameToCode)) {{
-                        if (c === code) {{
-                            countryName = n;
-                            break;
-                        }}
+                    
+                    // First try to match by ISO3 code
+                    if (code && ISO3_TO_ISO2[code]) {{
+                        const iso2Code = ISO3_TO_ISO2[code];
+                        const countryName = COUNTRY_CODES[iso2Code];
+                        if (countryName && correlationsByCountry[countryName]) return 'pointer';
                     }}
-                    if (!countryName && europeanNames.includes(name)) countryName = name;
-                    return (countryName && correlationsByCountry[countryName]) ? 'pointer' : 'default';
+                    
+                    // If that fails, try to match by name
+                    if (europeanNames.includes(name) && correlationsByCountry[name]) return 'pointer';
+                    
+                    return 'default';
                 }})
                 .on('click', function(event, d) {{
                     const code = d.id || d.properties.ISO_A2 || d.properties.iso_a2 || d.properties.ADM0_A3 || d.properties.ADM0_A3_IS || d.properties.ISO2 || d.properties.ISO3;
                     const name = d.properties.name || d.properties.NAME || d.properties.ADMIN;
-                    let countryName = null;
-                    for (const [n, c] of Object.entries(nameToCode)) {{
-                        if (c === code) {{
-                            countryName = n;
-                            break;
+                    
+                    // First try to match by ISO3 code
+                    if (code && ISO3_TO_ISO2[code]) {{
+                        const iso2Code = ISO3_TO_ISO2[code];
+                        const countryName = COUNTRY_CODES[iso2Code];
+                        if (countryName && correlationsByCountry[countryName]) {{
+                            showCorrelations(countryName);
+                            return;
                         }}
                     }}
-                    if (!countryName && europeanNames.includes(name)) countryName = name;
-                    if (countryName && correlationsByCountry[countryName]) {{
-                        showCorrelations(countryName);
+                    
+                    // If that fails, try to match by name
+                    if (europeanNames.includes(name) && correlationsByCountry[name]) {{
+                        showCorrelations(name);
                     }}
                 }});
         }});
